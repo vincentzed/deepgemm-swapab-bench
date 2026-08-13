@@ -25,13 +25,11 @@ with sync_playwright() as p:
         png = svg[:-4] + ".png"
         page.goto(f"file://{__import__('os').getcwd()}/{svg}")
         page.wait_for_timeout(1500)  # let the cdnjs webfonts load
-        page.screenshot(path=png)
-        img = Image.open(png).convert("RGB")
-        bg = Image.new("RGB", img.size,
-                       img.getpixel((img.width - 1, img.height - 1)))
-        bbox = ImageChops.difference(img, bg).getbbox()
+        page.screenshot(path=png, omit_background=True)
+        img = Image.open(png).convert("RGBA")
+        bbox = img.getchannel("A").getbbox()
         if bbox:
-            pad = 24
+            pad = 8
             bbox = (max(0, bbox[0] - pad), max(0, bbox[1] - pad),
                     min(img.width, bbox[2] + pad),
                     min(img.height, bbox[3] + pad))

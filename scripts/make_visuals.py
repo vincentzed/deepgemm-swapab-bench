@@ -19,7 +19,20 @@ import typer
 from rich.console import Console, Group
 from rich.table import Table
 from rich.panel import Panel
+from rich.terminal_theme import TerminalTheme
 from rich.text import Text
+
+# Same surface as the vega-lite cards (thread_visuals.PLOT_SURFACE) so every
+# figure in the README sits on one unified near-black card; ANSI slots snap to
+# the same validated colorway.
+THEME = TerminalTheme(
+    (13, 13, 16),                                   # background #0d0d10
+    (238, 233, 244),                                # foreground #eee9f4
+    [(13, 13, 16), (230, 103, 103), (25, 158, 112), (186, 132, 32),
+     (79, 146, 221), (213, 81, 129), (86, 180, 233), (238, 233, 244)],
+    [(70, 66, 80), (230, 103, 103), (25, 158, 112), (186, 132, 32),
+     (79, 146, 221), (213, 81, 129), (86, 180, 233), (255, 255, 255)],
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGS = ROOT / "logs"
@@ -61,7 +74,7 @@ def save(name: str, renderable, width: int, title: str) -> None:
     console = Console(record=True, width=width, force_terminal=True)
     console.print(renderable)
     path = OUT / f"{name}.svg"
-    console.save_svg(str(path), title=title)
+    console.save_svg(str(path), title=title, theme=THEME)
     print(f"wrote {path}")
 
 
@@ -107,56 +120,7 @@ def visual_headline() -> None:
              style="italic"),
     )
     save("swapab-headline", Panel(body, border_style="magenta"), 96,
-         "SwapAB headline")
-
-
-SPINE_LEFT = 12  # columns reserved for bars that lose to the plain kernel
-
-
-def bar(x: float, scale: int = 60) -> Text:
-    # diverging bar around a single anchored spine: │ = same speed,
-    # green grows right (swap wins), red grows left (swap loses)
-    n = round(abs(x - 1.0) * scale)
-    if n == 0:
-        return Text.assemble((" " * SPINE_LEFT, ""), ("│", "dim"),
-                             (f" {x:.2f}x", "dim"))
-    if x > 1.0:
-        return Text.assemble((" " * SPINE_LEFT, ""), ("│", "dim"),
-                             ("█" * n, "green"),
-                             (f" {x:.2f}x",
-                              "bold green" if x >= 1.1 else "green"))
-    n = min(n, SPINE_LEFT)
-    return Text.assemble((" " * (SPINE_LEFT - n), ""), ("█" * n, "red"),
-                         ("│", "dim"), (f" {x:.2f}x", "red"))
-
-
-def visual_sweep() -> None:
-    grid = Table.grid(padding=(0, 3))
-    shapes = [
-        ("MTP eh_proj (7168×14336, fp8)", WARM["fp8"], "mtp_eh_proj"),
-        ("dense MLP gate+up (4608×7168, fp8)", WARM["fp8"], "dense_mlp_gate_up"),
-        ("attention o_proj (7168×2048, fp8)", WARM["fp8"], "o_proj"),
-        ("LM head (16160×7168, fp4 weights)", WARM["fp4"], "lm_head"),
-    ]
-    for label, table, key in shapes:
-        rows = Table(title=label, box=None, show_header=False,
-                     title_justify="left", pad_edge=False, padding=(0, 0))
-        rows.add_column("m", justify="right", style="dim")
-        rows.add_column("bar", justify="left")
-        for m in M_LIST:
-            rows.add_row(f"M={m:<3d} ", bar(ratio(table, "dense", key, m)))
-        grid.add_row(rows)
-        grid.add_row(Text(""))
-    body = Group(
-        Text("how much faster the swapped kernel is, by batch size",
-             style="bold"),
-        Text("bar = swap-off time ÷ swap-on time, anchored at │ = same "
-             "speed; warm L2", style="dim"),
-        Text(""),
-        grid,
-    )
-    save("swapab-sweep", Panel(body, title="the small-M regime",
-                               border_style="cyan"), 76, "SwapAB sweep")
+         "SwapAB speedup — dense decode GEMMs")
 
 
 def visual_moe_mandatory() -> None:
@@ -192,44 +156,7 @@ def visual_moe_mandatory() -> None:
              "design.", style="bold italic"),
     )
     save("moe-mandatory", Panel(body, border_style="red"), 96,
-         "MoE needs SwapAB")
-
-
-def visual_multicast() -> None:
-    t = Table(title="no-multicast time ÷ multicast time — 32 experts/GPU, "
-                    "512 tokens/expert (prefill)")
-    t.add_column("expert GEMM")
-    for d in ("fp8", "fp4", "bf16"):
-        t.add_column(d, justify="right")
-    for label, key in (("gate+up (4096×7168)", "moe_gate_up"),
-                       ("down (7168×2048)", "moe_down")):
-        t.add_row(label, *[
-            speedup_text(ratio(COLD[d], "contiguous", key, 512,
-                               "swap_nomc", "swap_mc"), hot=1.15)
-            for d in ("fp8", "fp4", "bf16")])
-    fp8_gu = COLD["fp8"][("masked", "moe_gate_up", 8, "swap_mc")]
-    fp4_gu = COLD["fp4"][("masked", "moe_gate_up", 8, "swap_mc")]
-    fp8_dn = COLD["fp8"][("masked", "moe_down", 8, "swap_mc")]
-    fp4_dn = COLD["fp4"][("masked", "moe_down", 8, "swap_mc")]
-    body = Group(
-        Text("TMA multicast pairs CTAs on the N axis — a pairing only the "
-             "swapped layout's\ncluster geometry allows "
-             "(sm100.hpp:76-88).", style="dim"),
-        Text(""),
-        t,
-        Text(""),
-        Text("at decode sizes (1-32 tokens/expert) multicast is neutral "
-             "(~1.00x).", style="italic"),
-        Text(""),
-        Text.assemble(
-            ("bonus, decode MoE @ 8 tok/expert: fp4 weights ", "italic"),
-            (f"{fp8_gu:.0f}→{fp4_gu:.0f} µs", "bold green"),
-            (" (gate+up), ", "italic"),
-            (f"{fp8_dn:.0f}→{fp4_dn:.0f} µs", "bold green"),
-            (" (down) vs fp8 ≈ 1.65x", "italic")),
-    )
-    save("moe-multicast", Panel(body, title="what the swap unlocks",
-                                border_style="blue"), 92, "TMA multicast")
+         "forcing SwapAB off on MoE GEMMs — correctness")
 
 
 def main(
@@ -239,9 +166,7 @@ def main(
     OUT.mkdir(exist_ok=True)
     visuals = {
         "swapab-headline": visual_headline,
-        "swapab-sweep": visual_sweep,
         "moe-mandatory": visual_moe_mandatory,
-        "moe-multicast": visual_multicast,
     }
     for name, fn in visuals.items():
         if only and name != only:

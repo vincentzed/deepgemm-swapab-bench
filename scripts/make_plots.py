@@ -58,9 +58,9 @@ def sweep() -> None:
     line_plot(
         M_LIST, series, MEDIA / "swapab-sweep.png",
         xlabel="tokens in the batch (decode batch size per GPU)",
-        unit="plain-kernel time ÷ swapped-kernel time · warm L2 · "
-             "DeepSeek-V3.2 shapes at TP8, B300",
-        title="SwapAB pays while the batch is small",
+        unit="swap-off kernel time ÷ swap-on kernel time · warm L2 · "
+             "per-GPU shapes at TP8 · NVIDIA B300",
+        title="SwapAB speedup vs. batch size — DeepSeek-V3.2 dense GEMMs",
         zero=False, x_log2=True, x_ticks=M_LIST, y_format=".2f",
         hline=1.0, hline_label="same speed",
     )
@@ -77,9 +77,9 @@ def multicast() -> None:
             items.append((f"{label} · {d}", round(gain)))
     bar_plot(
         items, MEDIA / "moe-multicast.png",
-        unit="percent faster than no multicast · m-grouped contiguous, "
-             "32 experts/GPU, 512 tokens/expert",
-        title="What TMA multicast adds on MoE prefill",
+        unit="percent faster than no multicast · m-grouped contiguous · "
+             "32 experts/GPU · 512 tokens/expert · NVIDIA B300",
+        title="TMA multicast speedup — MoE prefill expert GEMMs",
         text_format=".0f",
     )
     print("wrote media/moe-multicast.png")
