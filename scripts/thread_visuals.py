@@ -217,14 +217,14 @@ LABEL_EXPR = (
     "datum.value >= 1000 ? format(datum.value / 1000, '.3~r') + 'k' "
     ": format(datum.value, ',.0f')"
 )
-PLOT_SURFACE = "#1e1a14"  # humansand dark paper (warm near-black)
-PLOT_SERIES = ["#5cc9b8", "#e2836a", "#b3a897", "#837a6a"]  # humansand teal/rust/muted/faint
-PLOT_HERO = "#5cc9b8"  # humansand accent teal (hero series)
-PLOT_MUTED_SERIES = "#837a6a"  # humansand faint (context series)
-PLOT_INK = "#f1ece0"
-PLOT_INK_MUTED = "#b3a897"
-PLOT_TAN = "#837a6a"  # humansand faint — unit/subtitle meta line
-PLOT_GRID = "#3c352a"
+PLOT_SURFACE = "#fffdf8"  # humansand light paper (charts are light; terminal panels stay dark)
+PLOT_SERIES = ["#176b64", "#a33e2d", "#6d6860", "#918a7c"]  # humansand light teal/rust/muted/faint
+PLOT_HERO = "#176b64"  # humansand light accent teal (hero series)
+PLOT_MUTED_SERIES = "#918a7c"  # humansand light faint (context series)
+PLOT_INK = "#161513"
+PLOT_INK_MUTED = "#6d6860"
+PLOT_TAN = "#918a7c"  # humansand light faint — unit/subtitle meta line
+PLOT_GRID = "#d8d0c4"
 PLOT_FONT = "Liberation Sans"  # Helvetica-metric stand-in for the original's Helvetica Neue
 
 
