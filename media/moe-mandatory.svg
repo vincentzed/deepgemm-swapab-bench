@@ -16,13 +16,13 @@
         font-family: arial;
     }
 
-    .terminal-2527243731-r1 { fill: #e66767 }
-.terminal-2527243731-r2 { fill: #eee9f4 }
-.terminal-2527243731-r3 { fill: #eee9f4;font-style: italic; }
-.terminal-2527243731-r4 { fill: #eee9f4;font-weight: bold }
-.terminal-2527243731-r5 { fill: #e66767;font-weight: bold }
-.terminal-2527243731-r6 { fill: #199e70;font-weight: bold }
-.terminal-2527243731-r7 { fill: #eee9f4;font-weight: bold;font-style: italic; }
+    .terminal-2527243731-r1 { fill: #e2836a }
+.terminal-2527243731-r2 { fill: #f1ece0 }
+.terminal-2527243731-r3 { fill: #f1ece0;font-style: italic; }
+.terminal-2527243731-r4 { fill: #f1ece0;font-weight: bold }
+.terminal-2527243731-r5 { fill: #e2836a;font-weight: bold }
+.terminal-2527243731-r6 { fill: #5cc9b8;font-weight: bold }
+.terminal-2527243731-r7 { fill: #f1ece0;font-weight: bold;font-style: italic; }
     </style>
 
     <defs>
@@ -64,7 +64,7 @@
             </clipPath>
     </defs>
 
-    <rect fill="#1e1a24" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1188" height="340.8" rx="8"/><text class="terminal-2527243731-title" fill="#eee9f4" text-anchor="middle" x="594" y="27">forcing&#160;SwapAB&#160;off&#160;on&#160;MoE&#160;GEMMs&#160;—&#160;correctness</text>
+    <rect fill="#1e1a14" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1188" height="340.8" rx="8"/><text class="terminal-2527243731-title" fill="#f1ece0" text-anchor="middle" x="594" y="27">forcing&#160;SwapAB&#160;off&#160;on&#160;MoE&#160;GEMMs&#160;—&#160;correctness</text>
             <g transform="translate(26,22)">
             <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
             <circle cx="22" cy="0" r="7" fill="#febc2e"/>

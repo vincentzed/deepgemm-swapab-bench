@@ -23,16 +23,17 @@ from rich.panel import Panel
 from rich.terminal_theme import TerminalTheme
 from rich.text import Text
 
-# Terminal panels sit on the SAME card surface as the vega-lite plots
-# (thread_visuals.PLOT_SURFACE #1e1a24), with ANSI slots snapped to the
-# skill's validated palette (GOOD/BAD accents, PALETTE hues).
+# Terminal panels sit on the SAME card surface as the vega-lite plots:
+# humansand's dark paper #1e1a14, ink #f1ece0, with the ANSI slots mapped to
+# the humansand accents — teal #5cc9b8 (good), rust #e2836a (bad/emphasis),
+# warm muted/faint grays for everything else.
 THEME = TerminalTheme(
-    (30, 26, 36),                                   # background #1e1a24
-    (238, 233, 244),                                # foreground #eee9f4
-    [(30, 26, 36), (230, 103, 103), (25, 158, 112), (201, 133, 0),
-     (57, 135, 229), (213, 81, 129), (86, 180, 233), (238, 233, 244)],
-    [(139, 132, 150), (230, 103, 103), (25, 158, 112), (201, 133, 0),
-     (57, 135, 229), (213, 81, 129), (86, 180, 233), (255, 255, 255)],
+    (30, 26, 20),                                   # background #1e1a14
+    (241, 236, 224),                                # foreground #f1ece0
+    [(30, 26, 20), (226, 131, 106), (92, 201, 184), (179, 168, 151),
+     (131, 122, 106), (92, 201, 184), (92, 201, 184), (241, 236, 224)],
+    [(131, 122, 106), (226, 131, 106), (92, 201, 184), (179, 168, 151),
+     (131, 122, 106), (92, 201, 184), (92, 201, 184), (255, 255, 255)],
 )
 
 ROOT = Path(__file__).resolve().parent.parent

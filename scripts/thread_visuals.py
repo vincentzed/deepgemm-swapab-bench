@@ -217,14 +217,14 @@ LABEL_EXPR = (
     "datum.value >= 1000 ? format(datum.value / 1000, '.3~r') + 'k' "
     ": format(datum.value, ',.0f')"
 )
-PLOT_SURFACE = "#1e1a24"  # purple-tinted near-black card
-PLOT_SERIES = ["#9174e8", "#ba8420", "#249f85", "#4f92dd"]  # validated 4-slot
-PLOT_HERO = "#a78bfa"  # brighter emphasis purple (lone-accent use only)
-PLOT_MUTED_SERIES = "#8b8496"  # gray-lavender context line (mute_rest mode)
-PLOT_INK = "#eee9f4"
-PLOT_INK_MUTED = "#a89fb8"
-PLOT_TAN = "#d8c5a3"  # light tan — unit/subtitle accent
-PLOT_GRID = "#332d3d"
+PLOT_SURFACE = "#1e1a14"  # humansand dark paper (warm near-black)
+PLOT_SERIES = ["#5cc9b8", "#e2836a", "#b3a897", "#837a6a"]  # humansand teal/rust/muted/faint
+PLOT_HERO = "#5cc9b8"  # humansand accent teal (hero series)
+PLOT_MUTED_SERIES = "#837a6a"  # humansand faint (context series)
+PLOT_INK = "#f1ece0"
+PLOT_INK_MUTED = "#b3a897"
+PLOT_TAN = "#837a6a"  # humansand faint — unit/subtitle meta line
+PLOT_GRID = "#3c352a"
 PLOT_FONT = "Liberation Sans"  # Helvetica-metric stand-in for the original's Helvetica Neue
 
 
