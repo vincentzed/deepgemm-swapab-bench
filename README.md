@@ -213,14 +213,14 @@ Because Mixture of Experts operations account for the vast majority of total ari
 
 ---
 
-### Result 4: The Size of the Dense Win Tracks Contraction Depth and Multicast Eligibility
+### Result 4: The Size of the Dense Win Tracks K and Multicast Eligibility
 
-The headline dense speedups are not uniform across the shape catalog, and the variation is itself informative. Two factors set the size of each shape's win, both visible when the batch-size-1 measurements are sorted by contraction depth $K$:
+The headline dense speedups are not uniform across the shape catalog, and the variation is itself informative. Two factors set the size of each shape's win, both visible when the batch-size-1 measurements are sorted by $K$ — the depth of each dot product, the axis the GEMM sums over:
 
-<p align="center"><img src="media/dense-win-by-k.png" width="88%" alt="horizontal deviation bars anchored at 1.0, one per GEMM shape sorted by contraction depth K: the swap win climbs from 0.95x at K=512 to 1.36x at K=14336 for multicast-eligible shapes, while the two shapes with an odd 128-tile count in N sit at 1.04x and 1.09x despite K=7168"></p>
-<p align="center"><em>The swapped layout's win at batch size 1, per shape, sorted by contraction depth. Teal bars can use the two-CTA multicast pairing; rust bars cannot, because their output width spans an odd number of 128-column tiles.</em></p>
+<p align="center"><img src="media/dense-win-by-k.png" width="88%" alt="horizontal deviation bars anchored at 1.0, one per GEMM shape sorted by K: the swap win climbs from 0.95x at K=512 to 1.36x at K=14336 for multicast-eligible shapes, while the two shapes with an odd 128-tile count in N sit at 1.04x and 1.09x despite K=7168"></p>
+<p align="center"><em>The swapped layout's win at batch size 1, per shape, sorted by K (the depth of each dot product). Teal bars can use the two-CTA multicast pairing; rust bars cannot, because their output width spans an odd number of 128-column tiles.</em></p>
 
-**Contraction depth amortizes the epilogue tax.** The swapped kernel pays a fixed per-tile cost on the way out — Tensor Memory can only be read into registers, transposed through `stmatrix`, staged in Shared Memory, and only then stored by TMA. That cost is independent of $K$, while the benefit of full lane occupancy accrues across the entire $K$ loop. The result is a nearly monotone climb: at $K = 512$ the swap is a net loss (0.95x on `kv_b_proj`), it breaks even near $K \approx 1500$, and it reaches 1.29x to 1.36x by $K \ge 7168$.
+**A deeper K amortizes the epilogue tax.** The swapped kernel pays a fixed per-tile cost on the way out — Tensor Memory can only be read into registers, transposed through `stmatrix`, staged in Shared Memory, and only then stored by TMA. That cost is independent of $K$, while the benefit of full lane occupancy accrues across the entire $K$ loop. The result is a nearly monotone climb: at $K = 512$ the swap is a net loss (0.95x on `kv_b_proj`), it breaks even near $K \approx 1500$, and it reaches 1.29x to 1.36x by $K \ge 7168$.
 
 **An odd tile count in N forfeits multicast.** The two-CTA cluster pairing requires the output width to span an even number of 128-column tiles. Two production shapes fail this parity check: the fused $q_a + kv_a$ projection ($N = 2112$, seventeen tiles) and the vocabulary-parallel LM head shard ($N = 16160$, one hundred twenty-seven tiles). Both sit at 1.04x and 1.09x respectively — well below the 1.29x to 1.34x achieved by eligible shapes at the same $K = 7168$. This suggests a zero-kernel-change optimization: padding the vocabulary so each tensor-parallel shard spans an even tile count would restore multicast eligibility for the LM head.
 

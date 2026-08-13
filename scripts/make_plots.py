@@ -133,7 +133,7 @@ def k_deviation_bars() -> None:
               for _, lab, r, mc in rows]
     spec = _plot_config(720, 30 * len(values) + 40) | {
         "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-        "title": {"text": "The dense SwapAB win grows with contraction depth K",
+        "title": {"text": "The dense SwapAB win grows with K, the depth of each dot product",
                   "subtitle": "swap-off ÷ swap-on kernel time · batch size 1 · fp8 · "
                               "warm L2 · bars anchored at 1.0 = same speed · NVIDIA B300"},
         "data": {"values": values},
