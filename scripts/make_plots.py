@@ -49,14 +49,14 @@ def sweep() -> None:
                          for m in M_LIST],
         }
     grouped_bar_plot(
-        [str(m) for m in M_LIST], {}, MEDIA / "swapab-sweep.png",
+        [str(m) for m in M_LIST], {}, MEDIA / "dense-kernel-times.png",
         unit="kernel time, microseconds (lower is better) · "
              "dense MLP gate+up 4608×7168 · warm L2 · NVIDIA B300",
         title="Dense GEMM kernel time by batch size — swap on vs. off",
         xlabel="tokens in the batch (decode batch size per GPU)",
         label_format=".1f", mute_second=True, facet_series=facet_series,
     )
-    print("wrote media/swapab-sweep.png")
+    print("wrote media/dense-kernel-times.png")
 
 
 def multicast() -> None:
@@ -69,13 +69,13 @@ def multicast() -> None:
             off.append(cold[d][("contiguous", key, 512, "swap_nomc")])
     grouped_bar_plot(
         groups, {"multicast on": on, "multicast off": off},
-        MEDIA / "moe-multicast.png",
+        MEDIA / "moe-multicast-times.png",
         unit="kernel time, microseconds (lower is better) · m-grouped "
              "contiguous · 32 experts/GPU · 512 tokens/expert · NVIDIA B300",
         title="MoE prefill expert GEMM time — with vs. without TMA multicast",
         label_format=".0f", mute_second=True, width=860,
     )
-    print("wrote media/moe-multicast.png")
+    print("wrote media/moe-multicast-times.png")
 
 
 if __name__ == "__main__":

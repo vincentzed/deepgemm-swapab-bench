@@ -14,10 +14,10 @@ runs, in FP8, FP4-weight, and BF16. Every number was measured on a B300 with
 CUPTI hardware counters. Every configuration was checked against a reference
 matmul before it was timed. Nothing is estimated.
 
-<p align="center"><img src="media/swapab-headline.png?v=1805f1b" width="92%" alt="terminal-style results table: swap-off over swap-on kernel time at M=1 for five DeepSeek-V3.2 GEMM shapes in fp8, fp4 and bf16, and at M=64 where the ratio drops below 1"></p>
+<p align="center"><img src="media/dense-speedup-table.png" width="92%" alt="terminal-style results table: swap-off over swap-on kernel time at M=1 for five DeepSeek-V3.2 GEMM shapes in fp8, fp4 and bf16, and at M=64 where the ratio drops below 1"></p>
 <p align="center"><em>How much faster the swapped kernel is at batch size 1 — and how it flips past batch 64.</em></p>
 
-<p align="center"><img src="media/swapab-sweep.png?v=1805f1b" width="88%" alt="three stacked bar panels, one per dtype (fp8, fp4 weights, bf16), sharing one microsecond axis: in each panel the swapped kernel is flat from 1 to 16 tokens (8.1 us fp8, 9.1 us fp4, 12.3 us bf16) while the plain kernel starts higher and only wins past 64 tokens"></p>
+<p align="center"><img src="media/dense-kernel-times.png" width="88%" alt="three stacked bar panels, one per dtype (fp8, fp4 weights, bf16), sharing one microsecond axis: in each panel the swapped kernel is flat from 1 to 16 tokens (8.1 us fp8, 9.1 us fp4, 12.3 us bf16) while the plain kernel starts higher and only wins past 64 tokens"></p>
 <p align="center"><em>Absolute kernel time, one panel per dtype. The swapped kernel is flat from 1 to 16 tokens in every dtype; the plain kernel only catches up once the batch is big. The gap is largest in bf16.</em></p>
 
 ## The three results
@@ -27,7 +27,7 @@ every m-grouped GEMM. We patched the code to force it off anyway. The masked
 layout returns wrong answers. The contiguous layout has no legal configuration
 at all.
 
-<p align="center"><img src="media/moe-mandatory.png?v=1805f1b" width="88%" alt="terminal-style matrix: forcing swap off on m-grouped GEMMs gives wrong results (masked) or no legal layout (contiguous) for fp8, fp4 and bf16; with swap on everything is OK"></p>
+<p align="center"><img src="media/moe-swap-mandatory.png" width="88%" alt="terminal-style matrix: forcing swap off on m-grouped GEMMs gives wrong results (masked) or no legal layout (contiguous) for fp8, fp4 and bf16; with swap on everything is OK"></p>
 <p align="center"><em>What happens when you force the swap off on grouped GEMMs. Every dtype, same story.</em></p>
 
 **2. For dense decode GEMMs, SwapAB is worth up to 1.5x — when the weights are
@@ -38,7 +38,7 @@ cold L2 (the realistic decode case) both variants wait on HBM and tie.
 **3. TMA multicast — which only works in the swapped layout — cuts MoE prefill
 time by up to 19%.** At decode sizes it does nothing.
 
-<p align="center"><img src="media/moe-multicast.png?v=1805f1b" width="85%" alt="grouped bar chart of absolute kernel time in microseconds: with multicast the MoE prefill gate+up runs 387 (fp8), 359 (fp4) and 761 (bf16) microseconds versus 477, 446 and 912 without; the down projection 193-375 versus 229-424"></p>
+<p align="center"><img src="media/moe-multicast-times.png" width="85%" alt="grouped bar chart of absolute kernel time in microseconds: with multicast the MoE prefill gate+up runs 387 (fp8), 359 (fp4) and 761 (bf16) microseconds versus 477, 446 and 912 without; the down projection 193-375 versus 229-424"></p>
 <p align="center"><em>MoE prefill expert GEMMs, with and without multicast. Only the swapped layout can multicast at all.</em></p>
 
 ## What SwapAB is

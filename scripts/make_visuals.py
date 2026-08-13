@@ -113,7 +113,7 @@ def visual_headline() -> None:
             speedup_text(ratio(WARM["bf16"], "dense", key, 1)),
             speedup_text(ratio(WARM["fp8"], "dense", key, 64)),
         )
-    save("swapab-headline", Panel(t, border_style="magenta"), 96,
+    save("dense-speedup-table", Panel(t, border_style="magenta"), 96,
          "SwapAB speedup — dense decode GEMMs")
 
 
@@ -144,7 +144,7 @@ def visual_moe_mandatory() -> None:
         Text("on SM100, SwapAB is not an optimization for MoE — it is the "
              "design.", style="bold italic"),
     )
-    save("moe-mandatory", Panel(body, border_style="red"), 96,
+    save("moe-swap-mandatory", Panel(body, border_style="red"), 96,
          "forcing SwapAB off on MoE GEMMs — correctness")
 
 
@@ -154,8 +154,8 @@ def main(
     """Render all visuals to media/*.svg."""
     OUT.mkdir(exist_ok=True)
     visuals = {
-        "swapab-headline": visual_headline,
-        "moe-mandatory": visual_moe_mandatory,
+        "dense-speedup-table": visual_headline,
+        "moe-swap-mandatory": visual_moe_mandatory,
     }
     for name, fn in visuals.items():
         if only and name != only:
