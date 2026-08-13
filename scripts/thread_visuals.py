@@ -395,41 +395,69 @@ def grouped_bar_plot(
     label_format: str = ".1f",
     mute_second: bool = False,
     width: int = 760,
+    facet_series: "dict[str, dict[str, list[float]]] | None" = None,
 ) -> Path:
     """Blog-card grouped vertical bars, direct value label on every bar.
 
     `mute_second=True` (exactly 2 series) renders series 0 as the hero purple
     and series 1 as the gray-lavender context — the hero-vs-context pattern.
+    `facet_series` ({facet -> {series -> values}}) renders row small-multiples
+    sharing one y scale; `series` is then ignored.
     """
-    names = list(series)
+    if facet_series:
+        names = list(next(iter(facet_series.values())))
+    else:
+        names = list(series)
     colors = [PLOT_HERO, PLOT_MUTED_SERIES] if mute_second and len(names) == 2 \
         else PLOT_SERIES[: len(names)]
-    values = [{"group": g, "series": name, "value": series[name][i]}
-              for name in names for i, g in enumerate(groups)]
-    spec = _plot_config(width, 380) | {
-        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-        "title": {"text": title, "subtitle": unit},
-        "data": {"values": values},
-        "layer": [
-            {"mark": {"type": "bar", "cornerRadiusEnd": 3}},
-            {"mark": {"type": "text", "align": "center", "dy": -10,
-                      "color": PLOT_INK, "fontSize": 12, "fontWeight": 700},
-             "encoding": {"text": {"field": "value", "format": label_format}}},
-        ],
-        "encoding": {
-            "x": {"field": "group", "type": "nominal", "sort": None,
-                  "title": xlabel or None,
-                  "axis": {"grid": False, "labelAngle": 0,
-                           "labelFontSize": 14}},
-            "xOffset": {"field": "series", "sort": None},
-            "y": {"field": "value", "type": "quantitative", "title": None,
-                  "axis": {"tickCount": 6, "labelExpr": LABEL_EXPR},
-                  "scale": {"zero": True}},
-            "color": {"field": "series", "type": "nominal",
-                      "scale": {"domain": names, "range": colors},
-                      "sort": None},
-        },
+    layer = [
+        {"mark": {"type": "bar", "cornerRadiusEnd": 3}},
+        {"mark": {"type": "text", "align": "center", "dy": -9,
+                  "color": PLOT_INK, "fontSize": 11, "fontWeight": 700},
+         "encoding": {"text": {"field": "value", "format": label_format}}},
+    ]
+    encoding = {
+        "x": {"field": "group", "type": "nominal", "sort": None,
+              "title": xlabel or None,
+              "axis": {"grid": False, "labelAngle": 0, "labelFontSize": 14}},
+        "xOffset": {"field": "series", "sort": None},
+        "y": {"field": "value", "type": "quantitative", "title": None,
+              "axis": {"tickCount": 5, "labelExpr": LABEL_EXPR},
+              "scale": {"zero": True}},
+        "color": {"field": "series", "type": "nominal",
+                  "scale": {"domain": names, "range": colors},
+                  "sort": None},
     }
+    if facet_series:
+        values = [{"facet": f, "group": g, "series": name, "value": sv[name][i]}
+                  for f, sv in facet_series.items()
+                  for name in sv for i, g in enumerate(groups)]
+        config = _plot_config(width, 0)
+        del config["width"], config["height"]
+        config["config"]["header"] = {
+            "title": None, "labelColor": PLOT_INK, "labelFontSize": 16,
+            "labelFontWeight": 700, "labelAngle": 0, "labelAlign": "left",
+            "labelAnchor": "start", "labelOrient": "top", "labelPadding": 6,
+        }
+        spec = config | {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "title": {"text": title, "subtitle": unit},
+            "data": {"values": values},
+            "facet": {"row": {"field": "facet", "type": "nominal",
+                              "sort": list(facet_series), "title": None}},
+            "spec": {"width": width, "height": 170,
+                     "layer": layer, "encoding": encoding},
+        }
+    else:
+        values = [{"group": g, "series": name, "value": series[name][i]}
+                  for name in names for i, g in enumerate(groups)]
+        spec = _plot_config(width, 380) | {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "title": {"text": title, "subtitle": unit},
+            "data": {"values": values},
+            "layer": layer,
+            "encoding": encoding,
+        }
     return _render_vl(spec, out_png)
 
 

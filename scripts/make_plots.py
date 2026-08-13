@@ -38,20 +38,23 @@ def load(name: str) -> dict:
 
 
 def sweep() -> None:
-    warm = load("fp8-warm.csv")
-    series = {
-        "swap on": [warm[("dense", "dense_mlp_gate_up", m, "swap_on")]
-                    for m in M_LIST],
-        "swap off": [warm[("dense", "dense_mlp_gate_up", m, "swap_off")]
-                     for m in M_LIST],
-    }
+    facet_series = {}
+    for dtype, label in (("fp8", "fp8"), ("fp4", "fp4 weights"),
+                         ("bf16", "bf16")):
+        warm = load(f"{dtype}-warm.csv")
+        facet_series[label] = {
+            "swap on": [warm[("dense", "dense_mlp_gate_up", m, "swap_on")]
+                        for m in M_LIST],
+            "swap off": [warm[("dense", "dense_mlp_gate_up", m, "swap_off")]
+                         for m in M_LIST],
+        }
     grouped_bar_plot(
-        [str(m) for m in M_LIST], series, MEDIA / "swapab-sweep.png",
+        [str(m) for m in M_LIST], {}, MEDIA / "swapab-sweep.png",
         unit="kernel time, microseconds (lower is better) · "
-             "dense MLP gate+up 4608×7168 · fp8 · warm L2 · NVIDIA B300",
+             "dense MLP gate+up 4608×7168 · warm L2 · NVIDIA B300",
         title="Dense GEMM kernel time by batch size — swap on vs. off",
         xlabel="tokens in the batch (decode batch size per GPU)",
-        label_format=".1f", mute_second=True,
+        label_format=".1f", mute_second=True, facet_series=facet_series,
     )
     print("wrote media/swapab-sweep.png")
 
