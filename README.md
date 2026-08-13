@@ -14,7 +14,8 @@
 > timing, every configuration correctness-checked before it is timed
 > (full raw captures in [`logs/`](logs/)).
 
-<p align="center"><img src="media/swapab-headline.png" width="100%" alt="left: swapAB speedup vs batch size for four DeepSeek-V3.2 GEMM shapes, above 1 for small batches; right: TMA multicast adds up to 1.24x on MoE prefill"></p>
+<p align="center"><img src="media/swapab-headline.png" width="92%" alt="terminal-style results table: swap-off over swap-on kernel time at M=1 for five DeepSeek-V3.2 GEMM shapes in fp8, fp4 and bf16, and at M=64 where the ratio drops below 1"></p>
+<p align="center"><img src="media/swapab-sweep.png" width="88%" alt="line chart: how much faster the swapped kernel is versus decode batch size for three shapes; well above 1 for batches of 1-16, crossing the same-speed line around batch 32-64"></p>
 
 SwapAB — computing **Bᵀ·Aᵀ = Cᵀ** instead of **A·B = C** — looks mathematically
 trivial. On paper `(AB)ᵀ = BᵀAᵀ` is a one-line identity; on an ideal GPU where
@@ -44,6 +45,8 @@ and the contiguous format aligns group boundaries to **240 rows** — a multiple
 of the 16-row UMMA-N step, not of any legal non-swap `BLOCK_M` (32/64/128).
 Even the *memory layout* of grouped GEMMs is swap-native.
 
+<p align="center"><img src="media/moe-mandatory.png" width="88%" alt="terminal-style matrix: forcing swap off on m-grouped GEMMs gives wrong results (masked) or no legal layout (contiguous) for fp8, fp4 and bf16; with swap on everything is OK"></p>
+
 **2. For dense decode GEMMs, SwapAB is what the heuristic picks at M ≤ 16 on
 almost every DeepSeek-V3.2 shape, and it is worth up to 1.5x when the kernel
 is not purely HBM-bound.** Warm-L2 kernel time, swap-off ÷ swap-on:
@@ -72,6 +75,8 @@ m-grouped contiguous, 32 experts per GPU, no-multicast ÷ multicast:
 | 32 | 1.09x | 1.27x | 1.10x | 1.02x | 1.20x | 1.06x |
 | 512 | **1.23x** | **1.24x** | **1.20x** | 1.18x | 1.19x | 1.13x |
 | 1-32 (masked, decode) | ~1.00x | ~1.00x | ~1.00x | ~1.00x | ~1.00x | ~1.00x |
+
+<p align="center"><img src="media/moe-multicast.png" width="80%" alt="bar chart: percent faster with TMA multicast on MoE prefill — 23-24 percent for gate+up in fp8 and fp4, 20 percent bf16; 13-19 percent for the down projection"></p>
 
 Bonus observation from the same runs: on the weight-bound decode MoE shapes,
 FP4 weights beat FP8 by the bandwidth you'd hope for — 160.5 µs → 96.0 µs
@@ -417,7 +422,11 @@ bench/
   bench_swapab.py       # CUPTI harness: dense/masked/contiguous x fp8/fp4/bf16 x modes
   probe_auto_choice.py  # records the unforced heuristic's layout choice per shape/M
   inspect_st_headers.py # reads tensor shapes from HF safetensors headers (no download)
-  make_figure.py        # builds media/swapab-headline.png from logs/
+scripts/
+  make_visuals.py       # terminal-style panels (rich -> SVG with window chrome)
+  make_plots.py         # blog-card charts (vega-lite via vl-convert, no browser)
+  thread_visuals.py     # vendored plot/panel helpers (vincentzed/my-skills)
+  svg_to_png.sh         # SVG -> PNG via headless Chromium + Pillow autocrop
 patches/
   0001-dg-force-swap-ab-multicast-knobs.patch   # DG_FORCE_SWAP_AB / DG_FORCE_MULTICAST
 logs/                   # CSVs + full stdout of every run in the README
