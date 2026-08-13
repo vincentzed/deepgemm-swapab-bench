@@ -217,15 +217,15 @@ LABEL_EXPR = (
     "datum.value >= 1000 ? format(datum.value / 1000, '.3~r') + 'k' "
     ": format(datum.value, ',.0f')"
 )
-PLOT_SURFACE = "#0d0d10"  # unified near-black card (same as terminal panels)
+PLOT_SURFACE = "#1e1a24"  # purple-tinted near-black card
 PLOT_SERIES = ["#9174e8", "#ba8420", "#249f85", "#4f92dd"]  # validated 4-slot
 PLOT_HERO = "#a78bfa"  # brighter emphasis purple (lone-accent use only)
 PLOT_MUTED_SERIES = "#8b8496"  # gray-lavender context line (mute_rest mode)
 PLOT_INK = "#eee9f4"
 PLOT_INK_MUTED = "#a89fb8"
 PLOT_TAN = "#d8c5a3"  # light tan — unit/subtitle accent
-PLOT_GRID = "#26262e"
-PLOT_FONT = "Inter"
+PLOT_GRID = "#332d3d"
+PLOT_FONT = "Liberation Sans"  # Helvetica-metric stand-in for the original's Helvetica Neue
 
 
 def _plot_config(width: int, height: int) -> dict:
@@ -380,6 +380,54 @@ def line_plot(
                 "scale": {"domain": names, "range": colors},
                 "sort": None,
             },
+        },
+    }
+    return _render_vl(spec, out_png)
+
+
+def grouped_bar_plot(
+    groups: list[str],
+    series: dict[str, list[float]],
+    out_png: Path,
+    unit: str,
+    title: str,
+    xlabel: str = "",
+    label_format: str = ".1f",
+    mute_second: bool = False,
+    width: int = 760,
+) -> Path:
+    """Blog-card grouped vertical bars, direct value label on every bar.
+
+    `mute_second=True` (exactly 2 series) renders series 0 as the hero purple
+    and series 1 as the gray-lavender context — the hero-vs-context pattern.
+    """
+    names = list(series)
+    colors = [PLOT_HERO, PLOT_MUTED_SERIES] if mute_second and len(names) == 2 \
+        else PLOT_SERIES[: len(names)]
+    values = [{"group": g, "series": name, "value": series[name][i]}
+              for name in names for i, g in enumerate(groups)]
+    spec = _plot_config(width, 380) | {
+        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+        "title": {"text": title, "subtitle": unit},
+        "data": {"values": values},
+        "layer": [
+            {"mark": {"type": "bar", "cornerRadiusEnd": 3}},
+            {"mark": {"type": "text", "align": "center", "dy": -10,
+                      "color": PLOT_INK, "fontSize": 12, "fontWeight": 700},
+             "encoding": {"text": {"field": "value", "format": label_format}}},
+        ],
+        "encoding": {
+            "x": {"field": "group", "type": "nominal", "sort": None,
+                  "title": xlabel or None,
+                  "axis": {"grid": False, "labelAngle": 0,
+                           "labelFontSize": 14}},
+            "xOffset": {"field": "series", "sort": None},
+            "y": {"field": "value", "type": "quantitative", "title": None,
+                  "axis": {"tickCount": 6, "labelExpr": LABEL_EXPR},
+                  "scale": {"zero": True}},
+            "color": {"field": "series", "type": "nominal",
+                      "scale": {"domain": names, "range": colors},
+                      "sort": None},
         },
     }
     return _render_vl(spec, out_png)

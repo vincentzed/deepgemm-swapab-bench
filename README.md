@@ -15,7 +15,7 @@
 > (full raw captures in [`logs/`](logs/)).
 
 <p align="center"><img src="media/swapab-headline.png" width="92%" alt="terminal-style results table: swap-off over swap-on kernel time at M=1 for five DeepSeek-V3.2 GEMM shapes in fp8, fp4 and bf16, and at M=64 where the ratio drops below 1"></p>
-<p align="center"><img src="media/swapab-sweep.png" width="88%" alt="line chart: how much faster the swapped kernel is versus decode batch size for three shapes; well above 1 for batches of 1-16, crossing the same-speed line around batch 32-64"></p>
+<p align="center"><img src="media/swapab-sweep.png" width="88%" alt="grouped bar chart of absolute kernel time in microseconds by batch size: the swapped kernel holds a flat 8.1 microseconds from 1 to 16 tokens while the plain kernel takes 8.5-10.5; past 64 tokens the plain kernel pulls ahead"></p>
 
 SwapAB — computing **Bᵀ·Aᵀ = Cᵀ** instead of **A·B = C** — looks mathematically
 trivial. On paper `(AB)ᵀ = BᵀAᵀ` is a one-line identity; on an ideal GPU where
@@ -76,7 +76,7 @@ m-grouped contiguous, 32 experts per GPU, no-multicast ÷ multicast:
 | 512 | **1.23x** | **1.24x** | **1.20x** | 1.18x | 1.19x | 1.13x |
 | 1-32 (masked, decode) | ~1.00x | ~1.00x | ~1.00x | ~1.00x | ~1.00x | ~1.00x |
 
-<p align="center"><img src="media/moe-multicast.png" width="80%" alt="bar chart: percent faster with TMA multicast on MoE prefill — 23-24 percent for gate+up in fp8 and fp4, 20 percent bf16; 13-19 percent for the down projection"></p>
+<p align="center"><img src="media/moe-multicast.png" width="85%" alt="grouped bar chart of absolute kernel time in microseconds: with multicast the MoE prefill gate+up runs 387 (fp8), 359 (fp4) and 761 (bf16) microseconds versus 477, 446 and 912 without; the down projection 193-375 versus 229-424"></p>
 
 Bonus observation from the same runs: on the weight-bound decode MoE shapes,
 FP4 weights beat FP8 by the bandwidth you'd hope for — 160.5 µs → 96.0 µs

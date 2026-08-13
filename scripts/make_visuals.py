@@ -12,6 +12,7 @@ All numbers are computed live from logs/*.csv — nothing staged.
 """
 
 import csv
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -22,16 +23,16 @@ from rich.panel import Panel
 from rich.terminal_theme import TerminalTheme
 from rich.text import Text
 
-# Same surface as the vega-lite cards (thread_visuals.PLOT_SURFACE) so every
-# figure in the README sits on one unified near-black card; ANSI slots snap to
-# the same validated colorway.
+# Terminal panels sit on the SAME card surface as the vega-lite plots
+# (thread_visuals.PLOT_SURFACE #1e1a24), with ANSI slots snapped to the
+# skill's validated palette (GOOD/BAD accents, PALETTE hues).
 THEME = TerminalTheme(
-    (13, 13, 16),                                   # background #0d0d10
+    (30, 26, 36),                                   # background #1e1a24
     (238, 233, 244),                                # foreground #eee9f4
-    [(13, 13, 16), (230, 103, 103), (25, 158, 112), (186, 132, 32),
-     (79, 146, 221), (213, 81, 129), (86, 180, 233), (238, 233, 244)],
-    [(70, 66, 80), (230, 103, 103), (25, 158, 112), (186, 132, 32),
-     (79, 146, 221), (213, 81, 129), (86, 180, 233), (255, 255, 255)],
+    [(30, 26, 36), (230, 103, 103), (25, 158, 112), (201, 133, 0),
+     (57, 135, 229), (213, 81, 129), (86, 180, 233), (238, 233, 244)],
+    [(139, 132, 150), (230, 103, 103), (25, 158, 112), (201, 133, 0),
+     (57, 135, 229), (213, 81, 129), (86, 180, 233), (255, 255, 255)],
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -75,6 +76,11 @@ def save(name: str, renderable, width: int, title: str) -> None:
     console.print(renderable)
     path = OUT / f"{name}.svg"
     console.save_svg(str(path), title=title, theme=THEME)
+    svg = path.read_text()
+    # strip the cdnjs Fira Code @font-face blocks, then point the SVG at the
+    # locally-installed mono (the original thread_visuals MONO_FONT)
+    svg = re.sub(r"@font-face \{.*?\}\n", "", svg, flags=re.S)
+    path.write_text(svg.replace("Fira Code", "Google Sans Code"))
     print(f"wrote {path}")
 
 
@@ -84,7 +90,7 @@ def speedup_text(x: float, hot: float = 1.10) -> Text:
 
 
 def visual_headline() -> None:
-    t = Table(title="swap-off time ÷ swap-on time — warm L2 (weights in cache)")
+    t = Table(title="swap-off ÷ swap-on kernel time · warm L2 · DeepSeek-V3.2 (TP8) · B300")
     t.add_column("per-GPU GEMM (TP8)")
     t.add_column("N×K", justify="right", style="dim")
     t.add_column("M=1 fp8", justify="right")
@@ -106,20 +112,7 @@ def visual_headline() -> None:
             speedup_text(ratio(WARM["bf16"], "dense", key, 1)),
             speedup_text(ratio(WARM["fp8"], "dense", key, 64)),
         )
-    body = Group(
-        Text("DeepGEMM SwapAB — DeepSeek-V3.2 decode GEMMs, NVIDIA B300 "
-             "(sm_103)", style="bold"),
-        Text("M = tokens in the batch. Every config CUPTI-timed and "
-             "correctness-checked first.", style="dim"),
-        Text(""),
-        t,
-        Text(""),
-        Text("swap wins while M is small, loses past M≈32 — exactly where "
-             "the heuristic flips.\ncold L2 (decode reality): both variants "
-             "HBM-bound, 0.94-1.05x — swap costs nothing.",
-             style="italic"),
-    )
-    save("swapab-headline", Panel(body, border_style="magenta"), 96,
+    save("swapab-headline", Panel(t, border_style="magenta"), 96,
          "SwapAB speedup — dense decode GEMMs")
 
 
@@ -146,11 +139,6 @@ def visual_moe_mandatory() -> None:
               *[Text("OK", style="bold green") for _ in range(3)])
     body = Group(
         t,
-        Text(""),
-        Text("the grouped scheduler's effective-M logic exists \"for swap A/B "
-             "and psum layout only\"\n(scheduler/gemm.cuh:162); contiguous "
-             "groups align to 240 rows = 15×16 UMMA-N steps,\nindivisible by "
-             "any non-swap BLOCK_M (32/64/128).", style="italic"),
         Text(""),
         Text("on SM100, SwapAB is not an optimization for MoE — it is the "
              "design.", style="bold italic"),
