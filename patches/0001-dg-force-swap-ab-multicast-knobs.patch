@@ -1,0 +1,74 @@
+diff --git a/csrc/jit_kernels/heuristics/common.hpp b/csrc/jit_kernels/heuristics/common.hpp
+index 2b79a8b..ef5ce82 100644
+--- a/csrc/jit_kernels/heuristics/common.hpp
++++ b/csrc/jit_kernels/heuristics/common.hpp
+@@ -15,8 +15,29 @@ static GemmConfig get_best_config(const GemmDesc& desc) {
+     desc.check_validity();
+ 
+     // Choose the best layout
+-    const auto layout_candidates = ArchSpec::get_layout_candidates(desc);
++    auto layout_candidates = ArchSpec::get_layout_candidates(desc);
+     DG_HOST_ASSERT(not layout_candidates.empty());
++
++    // `DG_FORCE_SWAP_AB`: unset or -1 -> heuristic decides; 0 -> never swap A/B; 1 -> swap A/B only.
++    // Benchmarking knob: lets one process measure both modes by flipping the env var.
++    if (const int force_swap_ab = get_env<int>("DG_FORCE_SWAP_AB", -1); force_swap_ab == 0 or force_swap_ab == 1) {
++        std::vector<Layout> filtered;
++        for (const auto& candidate: layout_candidates)
++            if (candidate.swap_ab == force_swap_ab)
++                filtered.push_back(candidate);
++        DG_HOST_ASSERT(not filtered.empty() and "DG_FORCE_SWAP_AB left no feasible layout");
++        layout_candidates = filtered;
++    }
++
++    // `DG_FORCE_MULTICAST`: unset or -1 -> heuristic decides; 0 -> single-CTA clusters only; 1 -> multicast only.
++    if (const int force_multicast = get_env<int>("DG_FORCE_MULTICAST", -1); force_multicast == 0 or force_multicast == 1) {
++        std::vector<Layout> filtered;
++        for (const auto& candidate: layout_candidates)
++            if ((candidate.get_cluster_size() > 1) == (force_multicast == 1))
++                filtered.push_back(candidate);
++        DG_HOST_ASSERT(not filtered.empty() and "DG_FORCE_MULTICAST left no feasible layout");
++        layout_candidates = filtered;
++    }
+     auto layout = layout_candidates[0];
+     auto layout_info = ArchSpec::get_layout_info(desc, layout);
+     for (int i = 1; i < static_cast<int>(layout_candidates.size()); ++ i) {
+diff --git a/csrc/jit_kernels/heuristics/sm100.hpp b/csrc/jit_kernels/heuristics/sm100.hpp
+index c8e9e2e..c326a19 100644
+--- a/csrc/jit_kernels/heuristics/sm100.hpp
++++ b/csrc/jit_kernels/heuristics/sm100.hpp
+@@ -29,14 +29,17 @@ struct SM100ArchSpec {
+         const int block_k = 128 / get_element_size(desc.get_mma_kind());
+ 
+         // Always enable swap A/B (and multicasting if possible) for m-grouped GEMMs
+-        if (desc.gemm_type == GemmType::MGroupedContiguous or
+-            desc.gemm_type == GemmType::MGroupedContiguousWithPsumLayout or
+-            desc.gemm_type == GemmType::MGroupedMasked) {
++        // (unless `DG_FORCE_SWAP_AB=0` asks for the non-swap enumeration below, for benchmarking)
++        const bool is_m_grouped = desc.gemm_type == GemmType::MGroupedContiguous or
++                                  desc.gemm_type == GemmType::MGroupedContiguousWithPsumLayout or
++                                  desc.gemm_type == GemmType::MGroupedMasked;
++        if (is_m_grouped and get_env<int>("DG_FORCE_SWAP_AB", -1) != 0) {
+             const bool swap_ab = true;
+             const auto block_n = 128;
+             const auto block_m = heuristics_runtime->get_mk_alignment_for_contiguous_layout();
+             const auto cluster_m = 1;
+-            const auto cluster_n = ceil_div(desc.n, block_n) % 2 == 0 and desc.num_sms % 2 == 0 ? 2 : 1;
++            const auto cluster_n = get_env<int>("DG_FORCE_MULTICAST", -1) != 0 and
++                                   ceil_div(desc.n, block_n) % 2 == 0 and desc.num_sms % 2 == 0 ? 2 : 1;
+             const auto layout = Layout{swap_ab, block_m, block_n, block_k, cluster_m, cluster_n};
+             std::vector<Layout> candidates = {layout};
+             return candidates;
+@@ -92,6 +95,12 @@ struct SM100ArchSpec {
+                         continue;
+ 
+                     for (int block_m: block_m_candidates) {
++                        // Forced non-swap for m-grouped contiguous layouts: M blocks must not straddle groups
++                        if ((desc.gemm_type == GemmType::MGroupedContiguous or
++                             desc.gemm_type == GemmType::MGroupedContiguousWithPsumLayout) and
++                            heuristics_runtime->get_mk_alignment_for_contiguous_layout() % block_m != 0)
++                            continue;
++
+                         // Ensure large swizzle sizes (32B swizzle yields poor performance)
+                         const auto swizzle_a_requirement = desc.a_dtype == kPackedFP4 ? 128 : 64;
+                         // Enforce swizzle alignment for MN major; otherwise check base MMA shape
