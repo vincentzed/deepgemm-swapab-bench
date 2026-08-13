@@ -117,35 +117,59 @@ def visual_headline() -> None:
          "SwapAB speedup — dense decode GEMMs")
 
 
-def visual_moe_mandatory() -> None:
-    t = Table(title="force swap OFF on m-grouped (MoE) GEMMs — SM100")
-    t.add_column("grouped layout")
+def visual_moe_receipt() -> None:
+    """Verbatim evidence: what actually happens when swap is forced off."""
+    diffs_off, diffs_on = {}, {}
     for d in ("fp8", "fp4", "bf16"):
-        t.add_column(d, justify="center")
-    statuses = {d: load_status(f"{d}.csv") for d in ("fp8", "fp4", "bf16")}
+        for r in csv.DictReader(open(LOGS / f"{d}.csv")):
+            if (r["kind"], r["name"], r["m_or_expected_m"]) == \
+                    ("masked", "moe_gate_up", "8"):
+                if r["mode"] == "swap_off":
+                    diffs_off[d] = float(r["diff"])
+                elif r["mode"] == "swap_mc":
+                    diffs_on[d] = float(r["diff"])
+    assert_line = next(
+        line for line in open(LOGS / "fp8.log")
+        if "swap_off   ERROR" in line and "contig" in line)
+    assert_msg = assert_line.split("ERROR: ", 1)[1].strip()
+    file_ref = assert_msg.split("(", 1)[1].split(")", 1)[0].split("/")[-1]
 
-    def worst_masked_diff(d: str) -> str:
-        diffs = [float(v[1]) for k, v in statuses[d].items()
-                 if k[0] == "masked" and k[3] == "swap_off"
-                 and v[0] == "WRONG_RESULT"]
-        return f"{max(diffs):.2f}" if diffs else "?"
+    def prompt(kind: str, note: str) -> Text:
+        return Text.assemble(
+            ("$ ", "dim"), ("DG_FORCE_SWAP_AB=0", "bold red"),
+            (f" python bench/bench_swapab.py --kinds {kind}", "bold"),
+            (f"   # {note}", "dim"))
 
-    t.add_row("masked (decode)",
-              *[Text(f"WRONG ({worst_masked_diff(d)})",
-                     style="bold red") for d in ("fp8", "fp4", "bf16")])
-    t.add_row("contiguous (prefill)",
-              *[Text("no legal layout", style="bold red")
-                for _ in range(3)])
-    t.add_row("either, with swap ON",
-              *[Text("OK", style="bold green") for _ in range(3)])
+    wrong_lines = [
+        Text.assemble(
+            (f"masked  {d:<5s} moe_gate_up  em=8   ", ""),
+            (f"diff={diffs_off[d]:.2e}", "bold red"),
+            ("   << WRONG RESULT, not timed", "red"))
+        for d in ("fp8", "fp4", "bf16")]
+    ok_note = Text.assemble(
+        ("  same configs, swap ON:  diff = ", "dim"),
+        (" · ".join(f"{diffs_on[d]:.0e}" if diffs_on[d] > 0 else "<1e-06"
+                    for d in ("fp8", "fp4", "bf16")),
+         "green"), ("  — OK", "green"))
+
     body = Group(
-        t,
+        prompt("masked", "the decode layout"),
+        *wrong_lines,
+        ok_note,
+        Text(""),
+        prompt("contiguous", "the prefill layout"),
+        Text.assemble(("ERROR: Assertion error ", "bold red"),
+                      (f"({file_ref})", "red"), (":", "bold red")),
+        Text('  "DG_FORCE_SWAP_AB left no feasible layout"', style="red"),
+        Text("  groups align to 240 rows = 15 × 16 UMMA-N steps — divisible "
+             "by no non-swap", style="dim"),
+        Text("  BLOCK_M (32 / 64 / 128); the layout cannot exist", style="dim"),
         Text(""),
         Text("on SM100, SwapAB is not an optimization for MoE — it is the "
              "design.", style="bold italic"),
     )
-    save("moe-swap-mandatory", Panel(body, border_style="red"), 96,
-         "forcing SwapAB off on MoE GEMMs — correctness")
+    save("moe-swap-off-receipt", Panel(body, border_style="red"), 96,
+         "forcing SwapAB off on MoE grouped GEMMs")
 
 
 def main(
@@ -155,7 +179,7 @@ def main(
     OUT.mkdir(exist_ok=True)
     visuals = {
         "dense-speedup-table": visual_headline,
-        "moe-swap-mandatory": visual_moe_mandatory,
+        "moe-swap-off-receipt": visual_moe_receipt,
     }
     for name, fn in visuals.items():
         if only and name != only:
