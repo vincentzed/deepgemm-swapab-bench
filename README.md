@@ -1,8 +1,8 @@
-# The Geometry of Blackwell GEMMs: Why SwapAB ($C^T = B^T \cdot A^T$) Is Mandatory on NVIDIA SM100
+# The Geometry of Blackwell GEMMs: Why SwapAB ($C^T = B^T \cdot A^T$) Wins Decode and Is Mandatory for MoE
 
 ## The Upshot
 
-On the NVIDIA Blackwell B300 (SM100) architecture, computing matrix multiplications in transposed form ($C^T = B^T \cdot A^T$) transforms an otherwise severe hardware under-utilization problem into near-optimal execution during low-batch inference.
+On the NVIDIA Blackwell Ultra B300 (sm_103, an SM100-family part), computing matrix multiplications in transposed form ($C^T = B^T \cdot A^T$) transforms an otherwise severe hardware under-utilization problem into near-optimal execution during low-batch inference.
 
 * **Dense decode speedup:** At small batch sizes between 1 and 16 tokens, SwapAB accelerates dense matrix multiplications by up to 1.53x by ensuring all 128 physical Tensor Memory lanes remain saturated.
 * **Prefill acceleration through multicast:** In Mixture of Experts prefill, SwapAB aligns thread block clusters to enable asynchronous Tensor Memory Accelerator multicast, reducing kernel execution times by up to 24 percent.
@@ -33,11 +33,11 @@ In modern inference libraries such as [DeepGEMM](https://github.com/sgl-project/
 
 During the decode phase of large language models, matrix operations are heavily skewed. The activation matrix ($A$) contains only a few token rows ($M \le 16$), whereas the weight matrix ($B$) spans thousands of channels ($N, K \ge 1024$).
 
-Blackwell executes matrix operations through the `tcgen05.mma` instruction, referred to in CUTLASS as UMMA. These instructions stage operands in Shared Memory and accumulate outputs directly into Tensor Memory. Tensor Memory is a dedicated 256 KB on-chip storage system located on each Streaming Multiprocessor, organized physically as 128 rows (known as lanes) by dynamic columns.
+Blackwell executes matrix operations through the `tcgen05.mma` instruction, referred to in CUTLASS as UMMA. These instructions stage operands in Shared Memory and accumulate outputs directly into Tensor Memory. Tensor Memory is a dedicated 256 KB on-chip storage system located on each Streaming Multiprocessor, organized physically as 128 rows (known as lanes) by 512 columns of 32 bits, with columns allocated dynamically per kernel.
 
 The hardware treats matrix dimensions with strict structural asymmetry:
 
-* **The M dimension is rigid:** It maps directly across Tensor Memory lanes and requires an allocation of 128 lanes per Thread Block Cluster, or 256 lanes across a two-cluster pair.
+* **The M dimension is rigid:** It maps directly across Tensor Memory lanes and requires an allocation of 128 lanes per thread block, or 256 lanes across a paired two-CTA cluster. The instruction set also defines a 64-lane variant, which these kernels do not use.
 * **The N dimension is flexible:** It maps across Tensor Memory columns and can be allocated dynamically in variable multiples of 16 columns up to 256.
 
 This constraint is asserted directly within DeepGEMM in [`sm100_fp8_fp4_gemm_1d1d.cuh:297-299`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/deep_gemm/include/deep_gemm/impls/sm100_fp8_fp4_gemm_1d1d.cuh#L297-L299):
@@ -65,7 +65,7 @@ constexpr uint32_t UMMA_M = LAYOUT_AD_M * kNumMulticast;   // Rigid allocation: 
 constexpr uint32_t UMMA_N = kSwapAB ? BLOCK_M : BLOCK_N;   // Flexible allocation: multiples of 16
 ```
 
-Under the hood, the kernel dynamically resizes `UMMA_N` to match the exact batch size, as shown in [`sm100_fp8_fp4_gemm_1d1d.cuh:329-331`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/deep_gemm/include/deep_gemm/impls/sm100_fp8_fp4_gemm_1d1d.cuh#L329-L331). When processing 7 tokens, the hardware selects `UMMA_N = 16`, which is the minimum hardware step size. This dynamic allocation reduces unused compute overhead from 8x down to approximately 2x.
+The instruction shape is fixed at JIT compilation time: the layout heuristic enumerates `BLOCK_M` — the value that becomes `UMMA_N` — in multiples of 16, as implemented in [`sm100.hpp:47-58`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/csrc/jit_kernels/heuristics/sm100.hpp#L47-L58). When processing 7 tokens, the heuristic selects `BLOCK_M = 16`, which is the minimum instruction step size, reducing unused compute overhead from roughly 18x (7 useful lanes out of 128) down to approximately 2.3x (7 useful columns out of 16). A runtime resize path also exists, as shown in [`sm100_fp8_fp4_gemm_1d1d.cuh:329-331`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/deep_gemm/include/deep_gemm/impls/sm100_fp8_fp4_gemm_1d1d.cuh#L329-L331), but the value it receives differs from `BLOCK_M` only for the tail blocks of the partial-sum grouped layout ([`scheduler/gemm.cuh:162-169`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/deep_gemm/include/deep_gemm/scheduler/gemm.cuh#L162-L169)); dense kernels always execute at their compiled `BLOCK_M`.
 
 ---
 
@@ -122,7 +122,7 @@ The `.trans` modifier transposes each 8x8 sub-tile during the Shared Memory writ
 ### Step 5: Cluster Axis Alignment and TMA Multicast
 DeepGEMM couples Cooperative Thread Array cluster pairing to the chosen layout, as shown in [`sm100.hpp:76-88`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/csrc/jit_kernels/heuristics/sm100.hpp#L76-L88). Standard layouts pair thread blocks along the M axis, while swapped layouts pair thread blocks along the N axis.
 
-During low-batch decode, there are insufficient M blocks to distribute across clusters. By placing the large weight dimension on the N axis, SwapAB allows paired thread blocks to share token activation tiles through hardware multicast while streaming independent weight tiles.
+During low-batch decode, the token axis (M) never produces enough blocks to pair across a cluster. The weight axis (N) is the only dimension with enough blocks to pair on — and pairing along N is exactly what the swapped layout permits. Paired thread blocks then share the token activation tile through hardware multicast while streaming independent weight tiles.
 
 ---
 
@@ -183,7 +183,7 @@ Three clear trends emerge from these empirical measurements:
 Because SwapAB enables thread block clustering along the N dimension, it allows kernels to leverage asynchronous Tensor Memory Accelerator multicast.
 
 <p align="center"><img src="media/moe-multicast-times.png" width="85%" alt="bar chart comparing execution times of MoE prefill kernels with and without multicast"></p>
-<p align="center"><em>Execution time of MoE prefill expert kernels with and without TMA multicast. Multicast is only possible when using the swapped layout.</em></p>
+<p align="center"><em>Execution time of MoE prefill expert kernels with and without TMA multicast. Standard layouts may cluster only along M, where these shapes never have two blocks to pair; the N-axis clustering that multicast depends on here exists only in the swapped layout.</em></p>
 
 * In MoE prefill operations with 512 tokens per expert, TMA multicast delivers a 13 to 24 percent reduction in total kernel execution time across FP8, FP4, and BF16.
 * In single-token decode operations, multicast has a neutral effect because token counts per expert are insufficient to form multi-block clusters.
@@ -206,8 +206,8 @@ When SwapAB is forcibly disabled for M-grouped GEMMs, the operations fail comple
 <p align="center"><img src="media/moe-swap-mandatory.png" width="88%" alt="terminal style output matrix showing correctness failures when SwapAB is disabled for grouped GEMMs"></p>
 <p align="center"><em>Behavior of grouped GEMMs when SwapAB is forcibly disabled across FP8, FP4, and BF16.</em></p>
 
-* **Masked decode layouts:** Kernels compile and run, but produce incorrect numerical results with relative errors near 0.5 across all data types. DeepGEMM's grouped scheduler calculates token offsets using indexing logic that is valid exclusively for swapped or partial sum layouts, as referenced in [`scheduler/gemm.cuh:162`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/deep_gemm/include/deep_gemm/scheduler/gemm.cuh#L162).
-* **Contiguous prefill layouts:** Kernels fail to construct a valid execution layout. DeepGEMM aligns expert group boundaries to multiples of 240 rows, matching the 16-row granularity of the swapped UMMA instruction. This boundary size cannot be evenly partitioned by standard non-swapped tile sizes such as 32, 64, or 128 rows.
+* **Masked decode layouts:** Kernels compile and run, but produce incorrect numerical results with relative errors near 0.5 across all data types. DeepGEMM's grouped scheduler computes each block's effective M — the quantity that feeds the runtime UMMA-N update — using logic its own comment marks as valid "for swap A/B and psum layout only," as seen in [`scheduler/gemm.cuh:162-169`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/deep_gemm/include/deep_gemm/scheduler/gemm.cuh#L162-L169).
+* **Contiguous prefill layouts:** Kernels fail to construct a valid execution layout. For M-grouped GEMMs, the heuristic generates exactly one layout candidate — the swapped one ([`sm100.hpp:31-43`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/csrc/jit_kernels/heuristics/sm100.hpp#L31-L43)) — so filtering it out leaves an empty candidate list. The memory format agrees with this design: our serving configuration aligns expert group boundaries to multiples of 240 rows (the alignment is runtime-configurable through `set_mk_alignment_for_contiguous_layout`; the library default is 128, per [`runtime.hpp:10`](https://github.com/sgl-project/DeepGEMM/blob/a348cd95a8ddfd3ef337b595d8e8b841c0d9cf0f/csrc/jit_kernels/heuristics/runtime.hpp#L10)), and 240 matches the 16-row granularity of the swapped UMMA instruction while being divisible by none of the standard non-swapped tile sizes of 32, 64, or 128 rows.
 
 Because Mixture of Experts operations account for the vast majority of total arithmetic work in architectures like DeepSeek-V3.2, SwapAB serves as a mandatory structural foundation for DeepGEMM on SM100 hardware.
 
@@ -230,7 +230,7 @@ Raw profiling logs and layout selections are available in [`logs/`](logs/).
 ## Reproducing the Results
 
 ### Environment Requirements
-* An NVIDIA GPU with SM100 architecture, such as an NVIDIA B300.
+* An NVIDIA GPU of the SM100 family, such as a B300 (sm_103).
 * A CUDA 13 development container with PyTorch and FlashInfer, such as `lmsysorg/sglang:nightly-dev-cu13`.
 * CUPTI Python bindings installed via `pip install cupti-python`.
 
